@@ -15,7 +15,7 @@
 
   <properties>
     <apex.version>3.4.0-incubating-SNAPSHOT</apex.version>
-    <malhar.version>3.4.0-incubating-SNAPSHOT</malhar.version>
+    <malhar.version>3.4.0-SNAPSHOT</malhar.version>
     <datatorrent.apppackage.classpath>lib/*.jar</datatorrent.apppackage.classpath>
   </properties>
 
@@ -178,6 +178,11 @@
       <groupId>joda-time</groupId>
       <artifactId>joda-time</artifactId>
       <version>2.9.3</version>
+    </dependency>
+    <dependency>
+      <groupId>org.codehaus.janino</groupId>
+      <artifactId>janino</artifactId>
+      <version>2.7.8</version>
     </dependency>
   </dependencies>
 
