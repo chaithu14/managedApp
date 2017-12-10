@@ -1,10 +1,16 @@
 package com.examples.app;
 
+import java.io.Serializable;
+
 /**
  * A single sales event
  */
-public class SalesEvent {
+public class SalesEvent implements Serializable {
 
+  public SalesEvent()
+  {
+
+  }
   /* dimension keys */
   public long timestamp;
   public int productId;

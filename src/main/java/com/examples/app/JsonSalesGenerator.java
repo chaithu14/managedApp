@@ -11,6 +11,8 @@ import java.util.TimerTask;
 import javax.validation.constraints.Min;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.map.annotate.JsonSerialize;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Generates sales events data and sends them out as JSON encoded byte arrays.
@@ -42,6 +44,7 @@ import org.codehaus.jackson.map.annotate.JsonSerialize;
  */
 public class JsonSalesGenerator implements InputOperator
 {
+  private static final transient Logger LOG = LoggerFactory.getLogger(JsonSalesGenerator.class);
   @Min(1)
   private int maxProductId = 10000000;
   @Min(1)
@@ -65,7 +68,7 @@ public class JsonSalesGenerator implements InputOperator
 
   // Limit number of emitted tuples per window
   @Min(0)
-  private long maxTuplesPerWindow = 40000;
+  private long maxTuplesPerWindow = 40;
 
   // Maximum amount of deviation below the maximum tuples per window
   @Min(0)
@@ -100,12 +103,13 @@ public class JsonSalesGenerator implements InputOperator
   private transient Map<Integer, Double> regionalTax = Maps.newHashMap();
   private transient RandomWeightedMovableGenerator<Integer> regionalGenerator = new RandomWeightedMovableGenerator<Integer>();
   private transient RandomWeightedMovableGenerator<Integer> channelGenerator = new RandomWeightedMovableGenerator<Integer>();
-  private transient Timer slidingTimer;
   private long startTime = System.currentTimeMillis();
+  private long timeIncrement;
 
   @Override
   public void beginWindow(long windowId)
   {
+    LOG.info("---------- begin WIndow: {}", windowId);
     tuplesCounter = 0;
     // Generate new output rate after tuplesRateCycle windows ONLY if tuplesPerWindowDeviation is non-zero
     if (windowId % tuplesRateCycle == 0 && tuplesPerWindowDeviation > 0) {
@@ -132,6 +136,8 @@ public class JsonSalesGenerator implements InputOperator
   @Override
   public void endWindow()
   {
+    startTime += timeIncrement;
+    LOG.info("---------------- End WIndow");
   }
 
   @Override
@@ -141,13 +147,14 @@ public class JsonSalesGenerator implements InputOperator
     generateDiscounts();
     generateRegionalTax();
     initializeDataGenerators();
-    startService();
+    timeIncrement = context.getValue(Context.OperatorContext.APPLICATION_WINDOW_COUNT) *
+      context.getValue(Context.DAGContext.STREAMING_WINDOW_SIZE_MILLIS);
   }
 
   @Override
   public void teardown()
   {
-    slidingTimer.cancel();
+
   }
 
   @Override
@@ -160,8 +167,10 @@ public class JsonSalesGenerator implements InputOperator
         if(jsonBytes.isConnected())
           this.jsonBytes.emit(mapper.writeValueAsBytes(salesEvent));
 
-        if(outputPort.isConnected())
+        if(outputPort.isConnected()) {
+          LOG.info("Emit: {}", salesEvent);
           this.outputPort.emit(salesEvent);
+        }
 
       } catch (Exception ex) {
         throw new RuntimeException(ex);
@@ -212,9 +221,7 @@ public class JsonSalesGenerator implements InputOperator
   SalesEvent generateSalesEvent() throws Exception {
 
     SalesEvent salesEvent = new SalesEvent();
-    synchronized (this) {
-      salesEvent.timestamp = startTime + random.nextInt((int) timeInterval);
-    }
+    salesEvent.timestamp = startTime;
     salesEvent.productId = randomId(maxProductId);
     salesEvent.channelId = channelGenerator.next();
     salesEvent.regionId = regionalGenerator.next();
@@ -305,22 +312,6 @@ public class JsonSalesGenerator implements InputOperator
   public void setMaxChannelId(int maxChannelId) {
     if (maxChannelId >= 1)
       this.maxChannelId = maxChannelId;
-  }
-
-  public void startService()
-  {
-    slidingTimer = new Timer();
-    slidingTimer.scheduleAtFixedRate(new TimerTask()
-    {
-      @Override
-      public void run()
-      {
-        synchronized (this) {
-          startTime += timeBucket;
-        }
-
-      }
-    }, timeBucket, timeBucket);
   }
   public double getMinAmount() {
     return minAmount;
